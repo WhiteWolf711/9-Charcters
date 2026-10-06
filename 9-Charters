@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meus 9 Personagens</title>
+<style>
+  :root { --bg:#f4f1ea; --ink:#111; --accent:#d33; --card:#fff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { text-align:center; padding:24px 16px 4px; }
+  h1 { margin:0; font-size:1.6rem; }
+  header p { margin:6px 0 0; color:#555; font-size:.95rem; }
+  main { display:flex; flex-wrap:wrap; gap:28px; justify-content:center; align-items:flex-start; padding:20px 16px 40px; max-width:1100px; margin:0 auto; }
+
+  /* Grade */
+  .board { width:min(440px,100%); background:#000; padding:4px; border-radius:2px; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; background:#000; }
+  .slot { position:relative; background:#fff; aspect-ratio:1/1.05; overflow:hidden; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .slot.sel { outline:4px solid var(--accent); outline-offset:-4px; }
+  .slot.over { background:#ffe9e9; }
+  .slot.loading img { opacity:.55; }
+  .slot img { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; }
+  .slot .num { font-size:2rem; color:#ccc; font-weight:700; }
+  .slot .fallback { padding:8px; text-align:center; font-weight:700; color:#555; font-size:.9rem; }
+  .slot .name { position:absolute; left:0; right:0; bottom:0; padding:14px 6px 4px; font-size:.72rem; font-weight:700; color:#fff; background:linear-gradient(transparent,rgba(0,0,0,.8)); text-align:center; }
+  .slot .warn { position:absolute; top:4px; left:4px; border:none; border-radius:6px; background:#f5a623; color:#000; font-size:14px; padding:2px 6px; cursor:pointer; }
+  .slot .rm { position:absolute; top:4px; right:4px; width:24px; height:24px; border:none; border-radius:50%; background:rgba(0,0,0,.65); color:#fff; font-size:15px; line-height:1; cursor:pointer; display:none; }
+  .slot:hover .rm, .slot:focus-within .rm { display:block; }
+  @media (hover:none) { .slot .rm { display:block; } }
+  .caption { background:#fff; margin-top:4px; padding:10px 12px; text-align:center; font-weight:800; text-transform:uppercase; font-size:1.05rem; line-height:1.2; outline:none; }
+
+  /* Painel */
+  .panel { width:min(480px,100%); background:var(--card); border-radius:12px; padding:16px; box-shadow:0 2px 10px rgba(0,0,0,.08); }
+  .panel h2 { margin:0 0 10px; font-size:1.05rem; }
+  .row { display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  input[type=text], input[type=url], select { flex:1; min-width:0; padding:10px 12px; border:1px solid #ccc; border-radius:8px; font-size:1rem; background:#fff; }
+  button.btn { padding:10px 14px; border:none; border-radius:8px; background:var(--ink); color:#fff; font-size:.95rem; cursor:pointer; }
+  button.btn.alt { background:#e6e2d8; color:var(--ink); }
+  button.btn:disabled { opacity:.5; cursor:default; }
+  a.glink { display:inline-block; font-size:.88rem; color:#245; margin:0 0 10px; }
+  .hint { font-size:.85rem; color:#666; margin:0 0 10px; }
+  .results { display:grid; grid-template-columns:repeat(auto-fill,minmax(92px,1fr)); gap:8px; min-height:40px; }
+  .res { position:relative; border:2px solid transparent; border-radius:8px; overflow:hidden; background:#f1efe9; cursor:pointer; text-align:left; padding:0; }
+  .res:hover { border-color:var(--accent); }
+  .res img { width:100%; aspect-ratio:1/1.15; object-fit:cover; display:block; background:#ddd; }
+  .res span { display:block; font-size:.72rem; padding:4px 5px; line-height:1.15; }
+  .res small { display:block; color:#777; font-size:.65rem; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .res .badge { position:absolute; top:4px; left:4px; background:rgba(0,0,0,.7); color:#fff; font-size:.58rem; padding:2px 5px; border-radius:4px; letter-spacing:.02em; }
+  .status { font-size:.9rem; color:#555; padding:6px 0; grid-column:1/-1; }
+  .more { grid-column:1/-1; }
+  .toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#111; color:#fff; padding:10px 16px; border-radius:8px; font-size:.9rem; opacity:0; pointer-events:none; transition:opacity .2s; max-width:90vw; text-align:center; z-index:10; }
+  .toast.show { opacity:1; }
+  hr { border:none; border-top:1px solid #eee; margin:14px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Meus 9 personagens</h1>
+  <p>Busque, escolha e deixe os outros assumirem algo sobre você.</p>
+</header>
+
+<main>
+  <section class="board" aria-label="Sua lista">
+    <div class="grid" id="grid"></div>
+    <div class="caption" id="caption" contenteditable="true" spellcheck="false">Coloque 9 personagens que você gosta e deixe os outros assumirem algo sobre você:</div>
+  </section>
+
+  <section class="panel">
+    <h2>Adicionar personagem</h2>
+    <form class="row" id="searchForm">
+      <input type="text" id="q" placeholder="Nome do personagem…" autocomplete="off" required>
+      <select id="source" aria-label="Fonte da busca">
+        <option value="all">Todas as fontes</option>
+        <option value="anilist">Anime e mangá</option>
+        <option value="wiki">Filmes, séries, jogos, HQs</option>
+      </select>
+      <button class="btn" type="submit">Buscar</button>
+    </form>
+    <p class="hint">Dica: para personagens com nome comum, acrescente a obra (ex.: “Ellie The Last of Us”). Clique num quadrado para escolher onde colocar; sem seleção, vai para o primeiro vazio. Arraste os quadrados para trocar de lugar.</p>
+    <div class="results" id="results"></div>
+
+    <hr>
+    <h2>Não achou a imagem certa?</h2>
+    <a class="glink" id="gimg" href="https://www.google.com/imghp" target="_blank" rel="noopener">Procurar no Google Imagens ↗</a>
+    <p class="hint">Lá, abra a imagem, copie o endereço dela e cole abaixo. Ou copie a própria imagem e use Ctrl+V nesta página.</p>
+    <div class="row">
+      <input type="text" id="customName" placeholder="Nome (opcional)">
+    </div>
+    <div class="row">
+      <input type="url" id="urlInput" placeholder="https://… (link da imagem)">
+      <button class="btn alt" id="urlBtn" type="button">Usar link</button>
+    </div>
+    <div class="row">
+      <button class="btn alt" id="uploadBtn" type="button">Enviar do computador</button>
+      <input type="file" id="file" accept="image/*" hidden>
+    </div>
+    <p class="hint">Você também pode arrastar um arquivo ou uma imagem de outra aba direto para um quadrado da grade.</p>
+
+    <hr>
+    <div class="row">
+      <button class="btn" id="download" type="button">Baixar imagem (PNG)</button>
+      <button class="btn alt" id="clear" type="button">Limpar tudo</button>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const MAX = 9;
+  const KEY = 'nove-personagens-v1';
+  let slots = Array(MAX).fill(null); // {id,name,img}
+  let selected = null;
+  let dragFrom = null;
+
+  const $ = s => document.querySelector(s);
+  const grid = $('#grid'), results = $('#results'), toastEl = $('#toast');
+
+  function toast(msg) {
+    toastEl.textContent = msg; toastEl.classList.add('show');
+    clearTimeout(toast.t); toast.t = setTimeout(() => toastEl.classList.remove('show'), 3800);
+  }
+
+  const isData = s => typeof s === 'string' && s.startsWith('data:');
+  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  /* ---------- persistência ---------- */
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify({ slots, caption: $('#caption').textContent })); } catch (e) {}
+  }
+  function load() {
+    try {
+      const d = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (d && Array.isArray(d.slots) && d.slots.length === MAX) slots = d.slots;
+      if (d && d.caption) $('#caption').textContent = d.caption;
+    } catch (e) {}
+  }
+
+  /* ---------- imagens: baixar e embutir ----------
+     Imagens de outros sites (ex.: AniList) não mandam permissão CORS e "sujam" o canvas,
+     o que bloqueia o PNG. Solução: baixar cada imagem escolhida (direto ou por um proxy
+     de imagens com CORS) e guardá-la como dado embutido. */
+  const enc = encodeURIComponent;
+
+  // Várias rotas são tentadas ao mesmo tempo; vence a primeira que entregar uma imagem legível.
+  function candidates(url) {
+    const bare = url.replace(/^https?:\/\//i, '');
+    return [
+      { n: 'direto', u: url, d: 0, img: true },
+      { n: 'wsrv.nl', u: 'https://wsrv.nl/?url=' + enc(url) + '&w=600&output=jpg&q=88', d: 0, img: true },
+      { n: 'wp.com', u: 'https://i0.wp.com/' + bare, d: 0 },
+      { n: 'weserv', u: 'https://images.weserv.nl/?url=' + enc(url) + '&w=600&output=jpg&q=88', d: 1500 },
+      { n: 'allorigins', u: 'https://api.allorigins.win/raw?url=' + enc(url), d: 3000 },
+      { n: 'corsproxy', u: 'https://corsproxy.io/?url=' + enc(url), d: 4500 }
+    ];
+  }
+
+  async function fetchBlob(url, parent, ms = 12000) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    const onAbort = () => ctrl.abort();
+    if (parent) parent.addEventListener('abort', onAbort);
+    try {
+      const r = await fetch(url, { signal: ctrl.signal, mode: 'cors', referrerPolicy: 'no-referrer' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const b = await r.blob();
+      if (!b.size) throw new Error('vazio');
+      return b;
+    } finally { clearTimeout(t); if (parent) parent.removeEventListener('abort', onAbort); }
+  }
+
+  function imageToDataURL(im, max = 600) {
+    const s = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(im.naturalWidth * s)); c.height = Math.max(1, Math.round(im.naturalHeight * s));
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(im, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', .88);
+  }
+
+  function blobToDataURL(blob, max = 600) {
+    return new Promise((res, rej) => {
+      const typed = (blob.type || '').startsWith('image/') ? blob : blob.slice(0, blob.size, 'image/jpeg');
+      const u = URL.createObjectURL(typed), im = new Image();
+      im.onload = () => { try { res(imageToDataURL(im, max)); } catch (e) { rej(e); } finally { URL.revokeObjectURL(u); } };
+      im.onerror = () => { URL.revokeObjectURL(u); rej(new Error('decode')); };
+      im.src = u;
+    });
+  }
+
+  // Alternativa ao fetch: carregar como <img> com CORS (só funciona se o servidor permitir).
+  function viaImg(url) {
+    return new Promise((res, rej) => {
+      const im = new Image(); im.crossOrigin = 'anonymous'; im.referrerPolicy = 'no-referrer';
+      const t = setTimeout(() => { im.src = ''; rej(new Error('tempo esgotado')); }, 12000);
+      im.onload = () => { clearTimeout(t); try { res(imageToDataURL(im)); } catch (e) { rej(e); } };
+      im.onerror = () => { clearTimeout(t); rej(new Error('bloqueada')); };
+      im.src = url;
+    });
+  }
+
+  async function embed(url) {
+    if (isData(url)) return url;
+    const ctrl = new AbortController(), errs = [], jobs = [];
+    candidates(url).forEach(c => {
+      jobs.push({ n: c.n + ' (fetch)', d: c.d, f: () => fetchBlob(c.u, ctrl.signal).then(b => blobToDataURL(b)) });
+      if (c.img) jobs.push({ n: c.n + ' (img)', d: c.d + 300, f: () => viaImg(c.u) });
+    });
+    try {
+      return await Promise.any(jobs.map(async j => {
+        if (j.d) await new Promise(r => setTimeout(r, j.d));
+        if (ctrl.signal.aborted) throw new Error('cancelado');
+        try { return await j.f(); }
+        catch (e) { errs.push(j.n + ': ' + ((e && e.message) || e)); throw e; }
+      }));
+    } catch (e) {
+      const err = new Error('embed failed'); err.details = errs; throw err;
+    } finally { ctrl.abort(); }
+  }
+
+  const busy = new Map();
+  function ensureEmbedded(id) {
+    const it = slots.find(s => s && s.id === id);
+    if (!it || isData(it.img)) return Promise.resolve(true);
+    if (busy.has(id)) return busy.get(id);
+    const p = (async () => {
+      try {
+        const d = await embed(it.img);
+        const cur = slots.find(s => s && s.id === id);
+        if (cur) { cur.img = d; delete cur.fail; }
+        return true;
+      } catch (e) {
+        const cur = slots.find(s => s && s.id === id); if (cur) cur.fail = true;
+        const det = (e.details || []).filter(x => !/cancelado/.test(x)).slice(0, 3).join(' · ');
+        console.warn('Falha ao baixar imagem', it.name, e.details);
+        toast('Não consegui baixar a imagem de “' + it.name + '”. ' + (det ? '(' + det.slice(0, 150) + ') ' : '') + 'Clique no ⚠ do quadrado para tentar de novo, ou envie outra imagem.');
+        return false;
+      } finally { busy.delete(id); render(); save(); }
+    })();
+    busy.set(id, p); render();
+    return p;
+  }
+
+  /* ---------- grade ---------- */
+  function render() {
+    grid.innerHTML = '';
+    slots.forEach((item, i) => {
+      const el = document.createElement('div');
+      el.className = 'slot' + (selected === i ? ' sel' : '') + (item && busy.has(item.id) ? ' loading' : '');
+      el.draggable = !!item;
+      el.dataset.i = i;
+      if (item) {
+        const img = document.createElement('img');
+        img.referrerPolicy = 'no-referrer'; img.alt = item.name; img.src = item.img;
+        img.addEventListener('error', () => {
+          img.remove();
+          const fb = document.createElement('div'); fb.className = 'fallback'; fb.textContent = item.name;
+          el.insertBefore(fb, el.firstChild);
+        });
+        el.appendChild(img);
+        const nm = document.createElement('div'); nm.className = 'name'; nm.textContent = item.name;
+        el.appendChild(nm);
+        const rm = document.createElement('button');
+        rm.className = 'rm'; rm.type = 'button'; rm.textContent = '×'; rm.title = 'Remover';
+        rm.addEventListener('click', e => { e.stopPropagation(); slots[i] = null; render(); save(); });
+        el.appendChild(rm);
+        if (item.fail && !isData(item.img) && !busy.has(item.id)) {
+          const w = document.createElement('button'); w.type = 'button'; w.className = 'warn'; w.textContent = '⚠';
+          w.title = 'Esta imagem não pôde ser incluída no PNG. Clique para tentar de novo.';
+          w.addEventListener('click', e => { e.stopPropagation(); ensureEmbedded(item.id); });
+          el.appendChild(w);
+        }
+      } else {
+        const n = document.createElement('div'); n.className = 'num'; n.textContent = i + 1;
+        el.appendChild(n);
+      }
+      el.addEventListener('click', () => { selected = (selected === i ? null : i); render(); });
+      el.addEventListener('dragstart', e => { dragFrom = i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(i)); });
+      el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('over'); });
+      el.addEventListener('dragleave', () => el.classList.remove('over'));
+      el.addEventListener('drop', e => {
+        e.preventDefault(); el.classList.remove('over');
+        const files = e.dataTransfer.files;
+        if (files && files.length && files[0].type.startsWith('image/')) { addFile(files[0], i); return; }
+        const uri = (e.dataTransfer.getData('text/uri-list') || '').split('\n').find(l => /^https?:\/\//i.test(l));
+        if (uri) { addUrl(uri.trim(), i); return; }
+        if (dragFrom === null || dragFrom === i) return;
+        [slots[dragFrom], slots[i]] = [slots[i], slots[dragFrom]];
+        dragFrom = null; selected = null; render(); save();
+      });
+      grid.appendChild(el);
+    });
+  }
+
+  function addItem(item, forcedIdx) {
+    if (slots.some(s => s && s.id === item.id)) { toast('Esse personagem já está na lista.'); return; }
+    const idx = forcedIdx != null ? forcedIdx : (selected !== null ? selected : slots.findIndex(s => !s));
+    if (idx === -1) { toast('A grade está cheia. Remova um personagem ou selecione um quadrado para substituir.'); return; }
+    slots[idx] = { id: item.id, name: item.name, img: item.img };
+    selected = null; render(); save();
+    ensureEmbedded(item.id);
+  }
+
+  /* ---------- busca ---------- */
+  async function searchAniList(q) {
+    const query = 'query($s:String){Page(perPage:20){characters(search:$s,sort:SEARCH_MATCH){id name{full native} image{large} media(perPage:1,sort:POPULARITY_DESC){nodes{title{romaji english}}}}}}';
+    const r = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ query, variables: { s: q } })
+    });
+    if (!r.ok) throw new Error('AniList ' + r.status);
+    const j = await r.json();
+    return (j.data.Page.characters || [])
+      .filter(c => c.image && c.image.large && !/default\.(jpg|png)/.test(c.image.large))
+      .map(c => {
+        const m = c.media && c.media.nodes[0];
+        return { id: 'al-' + c.id, name: c.name.full, img: c.image.large, sub: m ? (m.title.english || m.title.romaji) : '', src: 'AniList' };
+      });
+  }
+
+  async function searchJikan(q) {
+    const r = await fetch('https://api.jikan.moe/v4/characters?q=' + encodeURIComponent(q) + '&limit=15&order_by=favorites&sort=desc');
+    if (!r.ok) throw new Error('Jikan ' + r.status);
+    const j = await r.json();
+    return (j.data || [])
+      .filter(c => c.images && c.images.jpg && c.images.jpg.image_url && !/questionmark/.test(c.images.jpg.image_url))
+      .map(c => ({
+        id: 'mal-' + c.mal_id,
+        name: c.name.includes(', ') ? c.name.split(', ').reverse().join(' ') : c.name,
+        img: c.images.jpg.image_url, sub: 'MyAnimeList', src: 'MAL'
+      }));
+  }
+
+  const CHAR_RE = /character|personagem|fictional|fict[ií]cio|protagonist|antagonist|villain|vil[aã]o|superhero|super-?her[oó]i|anti-?hero|anti-?her[oó]i|her[oó]i|hero\b/i;
+  const DISAMB_RE = /disambiguation|desambigua/i;
+
+  async function searchWiki(q) {
+    const langs = ['pt', 'en'];
+    const lists = await Promise.all(langs.map(async lang => {
+      const u = 'https://' + lang + '.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=' + encodeURIComponent(q) +
+        '&gsrnamespace=0&gsrlimit=15&prop=pageimages|description&piprop=thumbnail&pithumbsize=500&pilicense=any' +
+        '&format=json&formatversion=2&origin=*';
+      try {
+        const r = await fetch(u); if (!r.ok) return [];
+        const j = await r.json();
+        const pages = (j.query && j.query.pages) || [];
+        return pages
+          .filter(p => p.thumbnail && !DISAMB_RE.test(p.description || ''))
+          .sort((a, b) => a.index - b.index)
+          .map(p => ({
+            id: 'wk-' + lang + '-' + p.pageid, name: p.title.replace(/\s*\(.*?\)\s*$/, '') || p.title, img: p.thumbnail.source,
+            sub: p.description || ('Wikipédia ' + lang.toUpperCase()), src: 'Wiki ' + lang.toUpperCase(),
+            boost: CHAR_RE.test(p.description || '') ? 1 : 0
+          }));
+      } catch (e) { return []; }
+    }));
+    return lists.flat();
+  }
+
+  function rank(list, q) {
+    const nq = norm(q), toks = nq.split(' ').filter(Boolean);
+    const seen = new Set();
+    const out = [];
+    list.forEach((it, i) => {
+      if (seen.has(it.img)) return; seen.add(it.img);
+      const n = norm(it.name);
+      let s = n === nq ? 0 : n.startsWith(nq) ? 1 : toks.every(t => n.includes(t)) ? 2 : 4;
+      if (it.boost) s -= .5;
+      out.push({ it, s, i });
+    });
+    out.sort((a, b) => a.s - b.s || a.i - b.i);
+    return out.map(o => o.it);
+  }
+
+  let current = [], shown = 0;
+  const PAGE = 24;
+
+  function renderResults() {
+    results.innerHTML = '';
+    current.slice(0, shown).forEach(it => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'res'; b.title = it.name + (it.sub ? ' — ' + it.sub : '');
+      const im = document.createElement('img'); im.referrerPolicy = 'no-referrer'; im.src = it.img; im.alt = it.name; im.loading = 'lazy';
+      const bd = document.createElement('div'); bd.className = 'badge'; bd.textContent = it.src;
+      const sp = document.createElement('span'); sp.textContent = it.name;
+      if (it.sub) { const sm = document.createElement('small'); sm.textContent = it.sub; sp.appendChild(sm); }
+      b.append(im, bd, sp);
+      b.addEventListener('click', () => addItem(it));
+      results.appendChild(b);
+    });
+    if (current.length > shown) {
+      const m = document.createElement('button'); m.type = 'button'; m.className = 'btn alt more';
+      m.textContent = 'Ver mais (' + (current.length - shown) + ')';
+      m.addEventListener('click', () => { shown += PAGE; renderResults(); });
+      results.appendChild(m);
+    }
+  }
+
+  $('#searchForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const q = $('#q').value.trim(); if (!q) return;
+    $('#gimg').href = 'https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(q + ' personagem');
+    results.innerHTML = '<div class="status">Buscando…</div>';
+    const src = $('#source').value;
+    const jobs = src === 'anilist' ? [searchAniList(q), searchJikan(q)]
+               : src === 'wiki' ? [searchWiki(q)]
+               : [searchAniList(q), searchJikan(q), searchWiki(q)];
+    const settled = await Promise.allSettled(jobs);
+    const ok = settled.filter(s => s.status === 'fulfilled');
+    if (!ok.length) { results.innerHTML = '<div class="status">Não consegui buscar agora. Verifique sua conexão e tente de novo.</div>'; return; }
+    current = rank(ok.flatMap(s => s.value), q); shown = PAGE;
+    if (!current.length) {
+      results.innerHTML = '<div class="status">Nada encontrado. Tente outro nome, acrescente a obra, ou use o link do Google Imagens abaixo.</div>';
+      return;
+    }
+    renderResults();
+    if (ok.length < settled.length) toast('Algumas fontes não responderam; os resultados podem estar incompletos.');
+  });
+
+  /* ---------- imagem própria: arquivo, link, colar, arrastar ---------- */
+  const customName = () => $('#customName').value.trim();
+
+  async function addFile(file, idx) {
+    try {
+      const data = await blobToDataURL(file);
+      addItem({ id: 'up-' + Date.now(), name: customName() || file.name.replace(/\.[^.]+$/, '') || 'Imagem', img: data }, idx);
+      $('#customName').value = '';
+    } catch (e) { toast('Não consegui ler essa imagem.'); }
+  }
+
+  function nameFromUrl(u) {
+    try {
+      const last = decodeURIComponent(new URL(u).pathname.split('/').filter(Boolean).pop() || '');
+      return last.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').slice(0, 40) || 'Personagem';
+    } catch (e) { return 'Personagem'; }
+  }
+
+  function addUrl(url, idx) {
+    if (!/^https?:\/\//i.test(url)) { toast('Cole um link que comece com http:// ou https://'); return; }
+    addItem({ id: 'url-' + Date.now(), name: customName() || nameFromUrl(url), img: url }, idx);
+    $('#customName').value = ''; $('#urlInput').value = '';
+  }
+
+  $('#uploadBtn').addEventListener('click', () => $('#file').click());
+  $('#file').addEventListener('change', e => { const f = e.target.files[0]; if (f) addFile(f); e.target.value = ''; });
+  $('#urlBtn').addEventListener('click', () => { const u = $('#urlInput').value.trim(); if (u) addUrl(u); });
+  $('#urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const u = e.target.value.trim(); if (u) addUrl(u); } });
+
+  document.addEventListener('paste', e => {
+    const cd = e.clipboardData; if (!cd) return;
+    const f = [...cd.items].find(i => i.type.startsWith('image/'));
+    if (f) { e.preventDefault(); addFile(f.getAsFile()); return; }
+    const t = e.target, typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+    if (typing) return;
+    const txt = (cd.getData('text') || '').trim();
+    if (/^https?:\/\/\S+$/i.test(txt)) { e.preventDefault(); addUrl(txt); }
+  });
+
+  /* ---------- limpar ---------- */
+  $('#clear').addEventListener('click', () => {
+    if (!slots.some(Boolean) || confirm('Limpar toda a lista?')) { slots = Array(MAX).fill(null); selected = null; render(); save(); }
+  });
+  $('#caption').addEventListener('input', save);
+
+  /* ---------- baixar PNG ---------- */
+  function loadImg(src) {
+    return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
+  }
+  function wrap(ctx, text, maxW) {
+    const words = text.split(' '), lines = []; let line = '';
+    words.forEach(w => { const t = line ? line + ' ' + w : w; if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t; });
+    if (line) lines.push(line); return lines;
+  }
+  $('#download').addEventListener('click', async () => {
+    const btn = $('#download'); btn.disabled = true; btn.textContent = 'Gerando…';
+    try {
+      // garante que todas as imagens estejam embutidas antes de desenhar
+      await Promise.all(slots.filter(s => s && !isData(s.img)).map(s => ensureEmbedded(s.id)));
+      const bad = slots.filter(s => s && !isData(s.img));
+      if (bad.length && !confirm('Estas imagens não puderam ser incluídas e sairão em cinza:\n\n' + bad.map(b => '• ' + b.name).join('\n') + '\n\nBaixar mesmo assim?')) return;
+
+      const cw = 300, ch = 315, gap = 6, pad = 6;
+      const W = pad * 2 + cw * 3 + gap * 2;
+      const ctx0 = document.createElement('canvas').getContext('2d');
+      ctx0.font = '800 26px system-ui, Arial, sans-serif';
+      const text = $('#caption').textContent.toUpperCase();
+      const lines = wrap(ctx0, text, W - pad * 2 - 30);
+      const capH = lines.length * 32 + 28;
+      const H = pad + ch * 3 + gap * 2 + gap + capH + pad;
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+
+      let missing = 0;
+      for (let i = 0; i < MAX; i++) {
+        const x = pad + (i % 3) * (cw + gap), y = pad + Math.floor(i / 3) * (ch + gap);
+        ctx.fillStyle = '#fff'; ctx.fillRect(x, y, cw, ch);
+        const it = slots[i]; if (!it) continue;
+        let drawn = false;
+        if (isData(it.img)) {
+          try {
+            const im = await loadImg(it.img);
+            const s = Math.max(cw / im.width, ch / im.height), w = im.width * s, h = im.height * s;
+            ctx.save(); ctx.beginPath(); ctx.rect(x, y, cw, ch); ctx.clip();
+            ctx.drawImage(im, x + (cw - w) / 2, y + (ch - h) / 2, w, h); ctx.restore();
+            drawn = true;
+          } catch (e) {}
+        }
+        if (!drawn) { missing++; ctx.fillStyle = '#ddd'; ctx.fillRect(x, y, cw, ch); }
+        ctx.font = '700 15px system-ui, Arial, sans-serif'; ctx.textAlign = 'center';
+        const g = ctx.createLinearGradient(0, y + ch - 36, 0, y + ch);
+        g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.8)');
+        ctx.fillStyle = g; ctx.fillRect(x, y + ch - 36, cw, 36);
+        ctx.fillStyle = '#fff'; ctx.fillText(it.name.length > 28 ? it.name.slice(0, 27) + '…' : it.name, x + cw / 2, y + ch - 10);
+      }
+      const cy = pad + ch * 3 + gap * 2 + gap;
+      ctx.fillStyle = '#fff'; ctx.fillRect(pad, cy, W - pad * 2, capH);
+      ctx.fillStyle = '#000'; ctx.font = '800 26px system-ui, Arial, sans-serif'; ctx.textAlign = 'center';
+      lines.forEach((l, k) => ctx.fillText(l, W / 2, cy + 36 + k * 32 - 4));
+
+      const a = document.createElement('a'); a.download = 'meus-9-personagens.png'; a.href = c.toDataURL('image/png'); a.click();
+      if (missing) toast(missing + ' imagem(ns) não puderam ser baixadas e saíram em cinza. Troque por outra imagem e baixe de novo.');
+    } catch (err) {
+      toast('Não foi possível gerar o PNG. Tire um print da grade.');
+    } finally { btn.disabled = false; btn.textContent = 'Baixar imagem (PNG)'; }
+  });
+
+  load(); render();
+  slots.forEach(s => { if (s) ensureEmbedded(s.id); });
+})();
+</script>
+</body>
+</html>
